@@ -34,7 +34,7 @@ jobs:
     name: Sign RPM packages
     permissions:
       id-token: write
-    uses: PoschLabs/sign-rpm-action/.github/workflows/sign.yml@v1
+    uses: PoschLabs/sign-rpms/.github/workflows/sign.yml@v1
     with:
       artifact-name: ${{ inputs.artifact-name }}
       signed-artifact-name: signed-rpm-packages
@@ -43,7 +43,7 @@ jobs:
     name: Publish RPM packages
     if: ${{ inputs.publish-rpm }}
     needs: sign
-    uses: PoschLabs/publish-packages-action/.github/workflows/publish-rpm.yml@v1
+    uses: PoschLabs/publish-packages/.github/workflows/publish-rpm.yml@v1
     with:
       server-url: ${{ inputs.server-url }}
       artifact-name: signed-rpm-packages
@@ -56,7 +56,7 @@ jobs:
     name: Publish DEB packages
     if: ${{ inputs.publish-deb }}
     needs: sign
-    uses: PoschLabs/publish-packages-action/.github/workflows/publish-deb.yml@v1
+    uses: PoschLabs/publish-packages/.github/workflows/publish-deb.yml@v1
     with:
       server-url: ${{ inputs.server-url }}
       artifact-name: ${{ inputs.artifact-name }}
