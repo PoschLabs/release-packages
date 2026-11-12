@@ -1,0 +1,66 @@
+name: Release packages
+
+on:
+  workflow_call:
+    inputs:
+      server-url:
+        description: URL of the package server (e.g. vars.PACKAGE_SERVER_URL)
+        type: string
+        required: true
+      artifact-name:
+        description: Name of the artifact containing the unsigned packages
+        type: string
+        default: unsigned-linux-packages
+      rpm-repository:
+        type: string
+        default: yum
+      deb-repository:
+        type: string
+        default: apt
+      publish-rpm:
+        type: boolean
+        default: true
+      publish-deb:
+        type: boolean
+        default: true
+    secrets:
+      server-username:
+        required: true
+      server-password:
+        required: true
+
+jobs:
+  sign:
+    name: Sign RPM packages
+    permissions:
+      id-token: write
+    uses: PoschLabs/sign-rpm-action/.github/workflows/sign.yml@v1
+    with:
+      artifact-name: ${{ inputs.artifact-name }}
+      signed-artifact-name: signed-rpm-packages
+
+  publish-rpm:
+    name: Publish RPM packages
+    if: ${{ inputs.publish-rpm }}
+    needs: sign
+    uses: PoschLabs/publish-packages-action/.github/workflows/publish-rpm.yml@v1
+    with:
+      server-url: ${{ inputs.server-url }}
+      artifact-name: signed-rpm-packages
+      repository: ${{ inputs.rpm-repository }}
+    secrets:
+      server-username: ${{ secrets.server-username }}
+      server-password: ${{ secrets.server-password }}
+
+  publish-deb:
+    name: Publish DEB packages
+    if: ${{ inputs.publish-deb }}
+    needs: sign
+    uses: PoschLabs/publish-packages-action/.github/workflows/publish-deb.yml@v1
+    with:
+      server-url: ${{ inputs.server-url }}
+      artifact-name: ${{ inputs.artifact-name }}
+      repository: ${{ inputs.deb-repository }}
+    secrets:
+      server-username: ${{ secrets.server-username }}
+      server-password: ${{ secrets.server-password }}
