@@ -1,9 +1,9 @@
 # release-packages
 
-Reusable workflow that signs and publishes Linux packages
-(sign → publish RPM + DEB). Wraps
-[`sign-rpm-action`](https://github.com/PoschLabs/sign-rpm-action) and
-[`publish-packages-action`](https://github.com/PoschLabs/publish-packages-action).
+Reusable workflow that signs and publishes Linux packages. It signs the RPMs
+with [`sign-rpms`](https://github.com/PoschLabs/sign-rpms), then publishes the
+signed RPMs and the DEBs with
+[`publish-packages`](https://github.com/PoschLabs/publish-packages).
 
 ## Usage
 
@@ -15,57 +15,74 @@ jobs:
   release:
     needs: build
     permissions:
+      contents: read
       id-token: write
     uses: PoschLabs/release-packages/.github/workflows/release.yml@v1
     with:
-      server-url: ${{ vars.PACKAGE_SERVER_URL }}
+      package-server-url: ${{ vars.PACKAGE_SERVER_URL }}
     secrets:
-      server-username: ${{ secrets.PACKAGE_SERVER_USERNAME }}
-      server-password: ${{ secrets.PACKAGE_SERVER_PASSWORD }}
+      package-server-username: ${{ secrets.PACKAGE_SERVER_USERNAME }}
+      package-server-password: ${{ secrets.PACKAGE_SERVER_PASSWORD }}
+      sign-infisical-url: ${{ secrets.SIGN_INFISICAL_URL }}
+      sign-infisical-identity-id: ${{ secrets.SIGN_INFISICAL_IDENTITY_ID }}
+      sign-infisical-project-id: ${{ secrets.SIGN_INFISICAL_PROJECT_ID }}
+      sign-infisical-secret-path: ${{ secrets.SIGN_INFISICAL_SECRET_PATH }}
 ```
+
+The secrets are not inherited: the caller must map each one explicitly, as
+shown above.
+
+## How it works
+
+1. **sign**: downloads the artifact `artifact-name`, signs every `*.rpm` in its
+   top directory and uploads the result as `signed-rpm-packages`.
+2. **publish-rpm**: publishes `signed-rpm-packages` to `rpm-repository`
+   (skipped if `publish-rpm` is `false`).
+3. **publish-deb**: publishes the DEBs from the unsigned `artifact-name`
+   artifact to `deb-repository` (skipped if `publish-deb` is `false`). DEBs are
+   not signed by this workflow.
+
+The publish jobs run only after signing succeeds, even when `publish-rpm` is
+`false`.
 
 ## Inputs
 
 | Input | Default | Description |
 |---|---|---|
-| `server-url` | *required* | Package server URL |
-| `artifact-name` | `unsigned-linux-packages` | Unsigned packages artifact |
+| `package-server-url` | *required* | URL of the package server |
+| `artifact-name` | `unsigned-linux-packages` | Artifact with the unsigned packages |
 | `rpm-repository` | `yum` | Target RPM repository |
 | `deb-repository` | `apt` | Target DEB repository |
-| `publish-rpm` / `publish-deb` | `true` | Toggle each publish job |
+| `publish-rpm` | `true` | Run the RPM publish job |
+| `publish-deb` | `true` | Run the DEB publish job |
 
-Secrets: `server-username`, `server-password` (required).
+## Secrets
+
+All secrets are required. The caller's secret is the one you create in GitHub;
+the input name is what you pass it as.
+
+| Input | Caller's secret | Level | Description |
+|---|---|---|---|
+| `package-server-username` | `PACKAGE_SERVER_USERNAME` | Organisation or repository | Package server user |
+| `package-server-password` | `PACKAGE_SERVER_PASSWORD` | Organisation or repository | Package server password |
+| `sign-infisical-url` | `SIGN_INFISICAL_URL` | Organisation, shared with the repository | Address of the Infisical instance |
+| `sign-infisical-identity-id` | `SIGN_INFISICAL_IDENTITY_ID` | Repository | ID of the repository's own Infisical machine identity (OIDC login) |
+| `sign-infisical-project-id` | `SIGN_INFISICAL_PROJECT_ID` | Organisation, shared with the repository | Infisical project that holds the signing key |
+| `sign-infisical-secret-path` | `SIGN_INFISICAL_SECRET_PATH` | Organisation, shared with the repository | Folder in that project with the signing key secrets |
+
+The `sign-infisical-*` secrets are forwarded to `sign-rpms` under its
+upper-case names (`SIGN_INFISICAL_URL`, ...). They are secrets, not variables,
+so they are masked in the logs of public repositories. `sign-rpms` fails early,
+naming any that are empty. Callers that used the earlier `SIGN_INFISICAL_*`
+variables must create secrets and add the mapping.
 
 ## Prerequisites
 
-### Signing (`sign-rpm-action`)
-
-The signing job reads four non-secret **Actions variables** from the `vars`
-context. They are most convenient as organisation variables shared with every
-app repository, but repository-level variables work equally well. They are
-plain variables, not secrets, and the workflow fails early naming any that are
-missing.
-
-| Variable | Description |
-|---|---|
-| `SIGN_INFISICAL_URL` | Address of the Infisical instance |
-| `SIGN_INFISICAL_IDENTITY_ID` | ID of the machine identity used for OIDC login |
-| `SIGN_INFISICAL_PROJECT_ID` | Infisical project holding the signing key |
-| `SIGN_INFISICAL_SECRET_PATH` | Folder in that project with the signing key secrets |
-
-Variables scoped to a deployment *environment* are only visible to jobs that
-declare that `environment:`, which the signing job does not, so define them at
-organisation or repository level.
-
-The signing key itself lives in Infisical, so no signing secrets are needed in
-GitHub. Also required:
-
-- The calling job must grant `permissions: id-token: write` (OIDC).
+- The calling job must grant `permissions: contents: read` and
+  `id-token: write` (the latter for the OIDC login to Infisical).
 - A self-hosted runner in the `package-publishing` group with the `rpm-signer`
   label must be available to the repository.
-
-### Publishing (`publish-packages-action`)
-
-- `server-url` input, typically from the variable `PACKAGE_SERVER_URL`
-- Secrets `PACKAGE_SERVER_USERNAME` and `PACKAGE_SERVER_PASSWORD`, passed as
-  `server-username` / `server-password`
+- The signing key lives in Infisical and the repository needs its own machine
+  identity there; see the setup guides in `sign-rpms`.
+- `PACKAGE_SERVER_URL` is typically an organisation variable; the package
+  server credentials are secrets.

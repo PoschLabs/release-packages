@@ -3,7 +3,7 @@ name: Release packages
 on:
   workflow_call:
     inputs:
-      server-url:
+      package-server-url:
         description: URL of the package server (e.g. vars.PACKAGE_SERVER_URL)
         type: string
         required: true
@@ -24,9 +24,23 @@ on:
         type: boolean
         default: true
     secrets:
-      server-username:
+      package-server-username:
+        description: Username for the package server
         required: true
-      server-password:
+      package-server-password:
+        description: Password for the package server
+        required: true
+      sign-infisical-url:
+        description: Address of the Infisical instance
+        required: true
+      sign-infisical-identity-id:
+        description: ID of the repository's Infisical machine identity
+        required: true
+      sign-infisical-project-id:
+        description: Infisical project that holds the signing key
+        required: true
+      sign-infisical-secret-path:
+        description: Folder in the Infisical project with the signing secrets
         required: true
 
 jobs:
@@ -38,6 +52,11 @@ jobs:
     with:
       artifact-name: ${{ inputs.artifact-name }}
       signed-artifact-name: signed-rpm-packages
+    secrets:
+      SIGN_INFISICAL_URL: ${{ secrets.sign-infisical-url }}
+      SIGN_INFISICAL_IDENTITY_ID: ${{ secrets.sign-infisical-identity-id }}
+      SIGN_INFISICAL_PROJECT_ID: ${{ secrets.sign-infisical-project-id }}
+      SIGN_INFISICAL_SECRET_PATH: ${{ secrets.sign-infisical-secret-path }}
 
   publish-rpm:
     name: Publish RPM packages
@@ -45,12 +64,12 @@ jobs:
     needs: sign
     uses: PoschLabs/publish-packages/.github/workflows/publish-rpm.yml@v1
     with:
-      server-url: ${{ inputs.server-url }}
+      server-url: ${{ inputs.package-server-url }}
       artifact-name: signed-rpm-packages
       repository: ${{ inputs.rpm-repository }}
     secrets:
-      server-username: ${{ secrets.server-username }}
-      server-password: ${{ secrets.server-password }}
+      server-username: ${{ secrets.package-server-username }}
+      server-password: ${{ secrets.package-server-password }}
 
   publish-deb:
     name: Publish DEB packages
@@ -58,9 +77,9 @@ jobs:
     needs: sign
     uses: PoschLabs/publish-packages/.github/workflows/publish-deb.yml@v1
     with:
-      server-url: ${{ inputs.server-url }}
+      server-url: ${{ inputs.package-server-url }}
       artifact-name: ${{ inputs.artifact-name }}
       repository: ${{ inputs.deb-repository }}
     secrets:
-      server-username: ${{ secrets.server-username }}
-      server-password: ${{ secrets.server-password }}
+      server-username: ${{ secrets.package-server-username }}
+      server-password: ${{ secrets.package-server-password }}
